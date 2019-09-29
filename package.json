@@ -1,12 +1,12 @@
 {
   "name": "auto-maintenance",
   "version": "1.0.0",
-  "description": "",
+  "description": "git@github.com:geekmuse/blog-auto-maintenance.git",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Brad Campbell <b@bradcod.es>",
   "license": "ISC",
   "devDependencies": {
     "serverless-iam-roles-per-function": "^2.0.2",
