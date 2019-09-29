@@ -1,0 +1,10 @@
+# these entries should be modified according to your values
+account: 000000000000
+mail:
+  domain: mydomain.com
+  bucket:
+    name: my.mail.bucket
+    region: us-west-2
+# these values should not be changed
+pythonRequirements:
+  dockerizePip: false
