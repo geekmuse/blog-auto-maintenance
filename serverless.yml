@@ -60,3 +60,4 @@ functions:
       mail_bucket_region: ${self:custom.mail.bucket.region}
       mail_bucket_name: ${self:custom.mail.bucket.name}
       log_level: "INFO"
+      accept_from: ${self:custom.mail.accept_from}

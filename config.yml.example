@@ -5,6 +5,8 @@ mail:
   bucket:
     name: my.mail.bucket
     region: us-west-2
+# until I write a serverless plugin, this format must be used
+  accept_from: "my.mail@mydomain.tld|my.mail2@mydomain.tld"
 # these values should not be changed
 pythonRequirements:
   dockerizePip: false
