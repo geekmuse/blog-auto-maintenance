@@ -1,6 +1,6 @@
 {
   "name": "auto-maintenance",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "git@github.com:geekmuse/blog-auto-maintenance.git",
   "main": "index.js",
   "scripts": {
