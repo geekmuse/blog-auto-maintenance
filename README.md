@@ -20,7 +20,7 @@ A full overview of the solution is available on my [blog](https://bradcod.es/pos
 
 ### AWS (or Some Other Registrar)
 
-- Control over your own domain.  You will need to set up an [MX record](https://en.wikipedia.org/wiki/MX_record#targetText=A%20mail%20exchanger%20record%20(MX,for%20load%20balancing%20and%20redundancy.) to point to [SES](https://aws.amazon.com/ses/) for inbound routing and processing.
+- Control over your own domain.  You will need to set up an [MX record](https://en.wikipedia.org/wiki/MX_record#targetText=A%20mail%20exchanger%20record%20\(MX,for%20load%20balancing%20and%20redundancy.) to point to [SES](https://aws.amazon.com/ses/) for inbound routing and processing.
 
 ## Usage
 
