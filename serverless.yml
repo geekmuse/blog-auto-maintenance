@@ -20,6 +20,7 @@ custom: ${file(config.yml)}
 provider:
   name: aws
   runtime: python3.7
+  versionFunctions: false
   deploymentBucket:
     name: cloudops-${self:custom.account}-${self:provider.region}
 
@@ -44,20 +45,57 @@ package:
     - config.yml.example
 
 functions:
-  inbound-ses-processor:
+  autoMaintToTextract:
+    handler: fn.handler
+    module: src/auto-maint-to-textract
+    timeout: 120
+    memorySize: 256
+    events:
+    - sns:
+        arn: !Ref autoMaintTopic
+        topicName: ${self:service.name}
+    iamRoleStatementsName: auto-maint-to-textract
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - textract:*
+      Resource: "*"
+    - Effect: Allow
+      Action:
+      - s3:Get*
+      - s3:List*
+      Resource: "arn:aws:s3:::${self:custom.mail.bucket.name}/*"      
+    environment:
+      mail_bucket_region: ${self:custom.mail.bucket.region}
+      mail_bucket_name: ${self:custom.mail.bucket.name}
+  inboundSesProcessor:
     handler: fn.handler
     module: src/inbound_ses_processor
     iamRoleStatementsName: inbound-ses-processor
     iamRoleStatements:
-      - Effect: "Allow"        
-        Action:
-          - s3:GetObject
-          - s3:DeleteObject
-          - s3:PutObject        
-        Resource: "arn:aws:s3:::${self:custom.mail.bucket.name}/*"
+    - Effect: Allow        
+      Action:
+      - s3:GetObject
+      - s3:DeleteObject
+      - s3:PutObject        
+      Resource: "arn:aws:s3:::${self:custom.mail.bucket.name}/*"
+    - Effect: Allow
+      Action:
+      - sns:Publish
+      Resource:
+      - !Ref autoMaintTopic
     environment:
       mail_domain: ${self:custom.mail.domain}
       mail_bucket_region: ${self:custom.mail.bucket.region}
       mail_bucket_name: ${self:custom.mail.bucket.name}
       log_level: "INFO"
       accept_from: ${self:custom.mail.accept_from}
+      subscriptions: '{"auto-maint":["arn:aws:sns:#{AWS::Region}:#{AWS::AccountId}:${self:service.name}"]}'
+
+resources:
+  Resources:
+    autoMaintTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:service.name}
+        DisplayName: AUTO_MAINT
