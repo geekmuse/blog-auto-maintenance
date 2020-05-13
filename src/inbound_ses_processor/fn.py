@@ -2,6 +2,7 @@ import boto3
 import os
 import aws_lambda_logging
 import logging
+import json
 from email.parser import Parser
 
 MAIL_BUCKET = os.getenv("mail_bucket_name", "")
@@ -9,11 +10,55 @@ MAIL_BUCKET_REGION = os.getenv("mail_bucket_region", os.environ["AWS_DEFAULT_REG
 MAIL_DOMAIN = os.getenv("mail_domain", "")
 LOG_LEVEL = os.getenv("log_level", "INFO")
 ACCEPT_FROM = os.getenv("accept_from", "")
+SUBS = os.getenv("subscriptions", None)
 
 logger = logging.getLogger()
 
 
-def parse_email_content(msg, s3_handle, message_id):
+def dispatch_subscribers(do_dispatch, client, recipient, message_id, attachments, subs):
+    if not do_dispatch:
+        return
+
+    subscribers = json.loads(subs)
+
+    if recipient not in subscribers.keys():
+        return
+
+    subscribers = subscribers[recipient]
+
+    msg = {
+        "default": f"new message received: {message_id}",
+        "attributes": {
+            "recipient": recipient,
+            "message_id": message_id,
+            "attachments": attachments,
+        },
+    }
+
+    for s in subscribers:
+        client.publish(
+            TopicArn=s,
+            Message=json.dumps(msg),
+            Subject=f"NEW_MSG_{recipient}",
+            MessageStructure="json",
+            MessageAttributes={
+                'recipient': {
+                    'DataType': 'String',
+                    'StringValue': recipient,
+                },
+                'message_id': {
+                    'DataType': 'String',
+                    'StringValue': message_id,
+                },
+                'attachments': {
+                    'DataType': 'String.Array',
+                    'StringValue': json.dumps(attachments),
+                },
+            }
+        )
+
+
+def parse_email_content(msg, s3_handle, message_id, attachments=[]):
     """If this is a multipart message, recursively iterate through each
     part, extracting all attachments and uploading each to a message-specific
     prefix within an attachments prefix.
@@ -27,7 +72,7 @@ def parse_email_content(msg, s3_handle, message_id):
 
     # if the message part is text part.
     if content_type == "text/plain" or content_type == "text/html":
-        pass
+        return attachments
     # if this message part is still multipart such as 'multipart/mixed','multipart/alternative','multipart/related'
     elif content_type.startswith("multipart"):
         # get multiple part list.
@@ -35,16 +80,18 @@ def parse_email_content(msg, s3_handle, message_id):
         # loop in the multiple part list.
         for body_msg in body_msg_list:
             # parse each message part.
-            parse_email_content(body_msg, s3_handle, message_id)
+            parse_email_content(body_msg, s3_handle, message_id, attachments)
+
+        return attachments
     # if this message part is an attachment part that means it is a attached file.
     elif content_type.startswith("image") or content_type.startswith("application"):
         # get message header 'Content-Disposition''s value and parse out attached file name.
         attach_file_info_string = msg.get("Content-Disposition")
         prefix = 'filename="'
         pos = attach_file_info_string.find(prefix)
-        attach_file_name = attach_file_info_string[
-            pos + len(prefix) : len(attach_file_info_string) - 1
-        ]
+        remain = attach_file_info_string[pos + len(prefix) : ]
+        filename_end_pos = remain.find('";')
+        attach_file_name = remain[0:filename_end_pos]
 
         # get attached file content.
         try:
@@ -62,8 +109,9 @@ def parse_email_content(msg, s3_handle, message_id):
             )
             raise e
 
+        attachments.append(f"@attachments/{message_id}/{attach_file_name}")
     else:
-        pass
+        return attachments
 
 
 def handler(event, context):
@@ -75,6 +123,13 @@ def handler(event, context):
     logger.debug(event)
     # Set up s3 client
     s3 = boto3.client("s3", region_name=MAIL_BUCKET_REGION)
+    sns = boto3.client("sns", region_name=os.environ["AWS_DEFAULT_REGION"])
+    do_dispatch_subscribers = False
+    attachment_prefixes = []
+
+    # Set up routing of events to SNS subs
+    if SUBS:
+        do_dispatch_subscribers = True
 
     # Extract relevant values from the record and log them
     ses_notification = event["Records"][0]["ses"]
@@ -112,7 +167,7 @@ def handler(event, context):
             data = s3.get_object(Bucket=MAIL_BUCKET, Key=f"{message_id}")
             contents_decoded = data["Body"].read().decode("utf-8")
             msg = Parser().parsestr(contents_decoded)
-            parse_email_content(msg, s3, message_id)
+            attachment_prefixes = parse_email_content(msg, s3, message_id)
         except Exception as e:
             logger.error(
                 {
@@ -120,6 +175,15 @@ def handler(event, context):
                 }
             )
             raise e
+
+        dispatch_subscribers(
+            do_dispatch=do_dispatch_subscribers,
+            client=sns,
+            recipient=recipient_prefix,
+            message_id=message_id,
+            attachments=attachment_prefixes,
+            subs=SUBS,
+            )
     else:
         logger.info("mail_from not in accepted_senders")
 
