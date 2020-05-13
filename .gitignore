@@ -22,3 +22,6 @@ var/
 # Other
 node_modules/
 config.yml
+
+#CI/CD
+pyflakes.log
