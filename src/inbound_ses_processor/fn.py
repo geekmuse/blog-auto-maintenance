@@ -42,19 +42,13 @@ def dispatch_subscribers(do_dispatch, client, recipient, message_id, attachments
             Subject=f"NEW_MSG_{recipient}",
             MessageStructure="json",
             MessageAttributes={
-                'recipient': {
-                    'DataType': 'String',
-                    'StringValue': recipient,
+                "recipient": {"DataType": "String", "StringValue": recipient},
+                "message_id": {"DataType": "String", "StringValue": message_id},
+                "attachments": {
+                    "DataType": "String.Array",
+                    "StringValue": json.dumps(attachments),
                 },
-                'message_id': {
-                    'DataType': 'String',
-                    'StringValue': message_id,
-                },
-                'attachments': {
-                    'DataType': 'String.Array',
-                    'StringValue': json.dumps(attachments),
-                },
-            }
+            },
         )
 
 
@@ -89,7 +83,7 @@ def parse_email_content(msg, s3_handle, message_id, attachments=[]):
         attach_file_info_string = msg.get("Content-Disposition")
         prefix = 'filename="'
         pos = attach_file_info_string.find(prefix)
-        remain = attach_file_info_string[pos + len(prefix) : ]
+        remain = attach_file_info_string[pos + len(prefix) :]
         filename_end_pos = remain.find('";')
         attach_file_name = remain[0:filename_end_pos]
 
@@ -183,7 +177,7 @@ def handler(event, context):
             message_id=message_id,
             attachments=attachment_prefixes,
             subs=SUBS,
-            )
+        )
     else:
         logger.info("mail_from not in accepted_senders")
 
