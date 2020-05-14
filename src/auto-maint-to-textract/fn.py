@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import datetime
-import sys
 import re
 import json
 import boto3

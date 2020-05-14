@@ -138,7 +138,6 @@ def handler(event, context):
     if mail_from in accepted_senders or accepted_senders == [""]:
         logger.info("mail_from in accepted_senders")
         # Parse recipient(s) so that we can place the message in recipient-specific prefixes
-        num_recipients = len(receipt["recipients"])
         recipient_prefixes = [x.split("@")[0] for x in receipt["recipients"]]
         copy_source = {"Bucket": MAIL_BUCKET, "Key": message_id}
         # Loop through parsed recipients and copy message to each prefix
