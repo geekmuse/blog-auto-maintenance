@@ -70,7 +70,7 @@ functions:
       mail_bucket_name: ${self:custom.mail.bucket.name}
   inboundSesProcessor:
     handler: fn.handler
-    module: src/inbound_ses_processor
+    module: src/inbound-ses-processor
     iamRoleStatementsName: inbound-ses-processor
     iamRoleStatements:
     - Effect: Allow        
