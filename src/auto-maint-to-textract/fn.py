@@ -1,20 +1,37 @@
 #!/usr/bin/env python
 
+import aws_lambda_logging
+import boto3
+import json
+import logging
 import os
 import re
-import json
-import boto3
 
+LOG_LEVEL = os.getenv("log_level", "INFO")
 MAIL_BUCKET = os.getenv("mail_bucket_name", "")
 MAIL_BUCKET_REGION = os.getenv("mail_bucket_region", os.environ["AWS_DEFAULT_REGION"])
 
+logger = logging.getLogger()
+
 
 def get_kv_map(file_name):
+    """Uses the AWS Textract service to get a mapping of data values
+    within the document then returns a set of key-value pairs
+    based on a parsing of the data structure returned by Textract.
 
+    Args:
+        file_name: String indicating absolute path to a file to be sent to Textract.
+
+    Returns:
+        key_map:  Map of Textract-derived keys within the document.
+        value_map:  Map of Textract-derived values within the document.
+        block_map: Map of Textract-derived blocks within the document.
+
+    """
     with open(file_name, "rb") as fp:
         img_test = fp.read()
         bytes_test = bytearray(img_test)
-        print("Image loaded", file_name)
+        logging.debug("Image loaded", file_name)
 
         # process using image bytes
         client = boto3.client("textract")
@@ -42,24 +59,58 @@ def get_kv_map(file_name):
 
 
 def get_kv_relationship(key_map, value_map, block_map):
+    """Get key-value relationships from Textract-returned parse data.
+
+    Args:
+        key_map:  Map of Textract-derived keys within the document.
+        value_map:  Map of Textract-derived values within the document.
+        block_map: Map of Textract-derived blocks within the document.
+
+    Returns:
+        Dict of key-value matched values.
+
+    """
     kvs = {}
     for block_id, key_block in key_map.items():
         value_block = find_value_block(key_block, value_map)
         key = get_text(key_block, block_map)
         val = get_text(value_block, block_map)
         kvs[key] = val
+
     return kvs
 
 
 def find_value_block(key_block, value_map):
+    """Finds a value_block for a given key_block from value_map.
+
+    Args:
+        key_block:  Key block.
+        value_map:  Map of values.
+
+    Returns:
+        Matching value block.
+
+    """
     for relationship in key_block["Relationships"]:
         if relationship["Type"] == "VALUE":
             for value_id in relationship["Ids"]:
                 value_block = value_map[value_id]
+
     return value_block
 
 
 def get_text(result, blocks_map):
+    """Gets the text result from a hierarchical representation
+    of a data element within the parsed document.
+
+    Args:
+        result: Textract API response.
+        blocks_map: Textract-derived blocks from parsed document.
+
+    Returns:
+        Embedded text from element within a block.
+
+    """
     text = ""
     if "Relationships" in result:
         for relationship in result["Relationships"]:
@@ -76,6 +127,20 @@ def get_text(result, blocks_map):
 
 
 def marshal_response(kvs):
+    """Implementation-specific.  Based on document structure,
+    pull out the relevant parts and return a dict that is
+    useful to the case at hand.
+
+    A better implementation of this would be to put this into an
+    abstract base class that must be re-implemented for any given use-case.
+
+    Args:
+        kvs:  Dict of Textract-derived key-values
+
+    Returns:
+        Conformed dict of key-value pairs.
+
+    """
     ret = {}
     ret["Description"] = search_value(kvs, "description").strip()
     ret["Vin"] = search_value(kvs, "vin").strip()
@@ -91,13 +156,37 @@ def marshal_response(kvs):
 
 
 def search_value(kvs, search_key):
+    """Searches for a matching key (case-insensitive)
+    among all keys in a provided dict.
+
+    Args:
+        kvs:  Key-value dict.
+        search_key:  Value to search amongst keys for.
+
+    Returns:
+        Matching key if found, else None.
+
+    """
     for key, value in kvs.items():
         if re.search(search_key, key, re.IGNORECASE):
             return value
 
+    return None
+
 
 def handler(event, context):
-    print(event)
+    """Main function handler.
+
+    Args:
+        event: AWS event
+        context:  Lambda context
+
+    """
+    # Set up logging
+    aws_lambda_logging.setup(level=LOG_LEVEL, boto_level="CRITICAL")
+    logger.debug(event)
+
+    # Set up S3 client
     s3 = boto3.client("s3", region_name=MAIL_BUCKET_REGION)
 
     attachment_prefixes_serialized = event["Records"][0]["Sns"]["MessageAttributes"][
@@ -111,7 +200,7 @@ def handler(event, context):
             with open(file_name, "wb") as fp:
                 s3.download_fileobj(MAIL_BUCKET, prefix, fp)
         except Exception as e:
-            print(f"{repr(e)}")
+            logging.error(f"{repr(e)}")
             raise e
 
         key_map, value_map, block_map = get_kv_map(file_name)
@@ -119,4 +208,4 @@ def handler(event, context):
         # Get Key Value relationship
         kvs = get_kv_relationship(key_map, value_map, block_map)
         o = marshal_response(kvs)
-        print(f"{file_name}: {o}")
+        logging.info(f"{file_name}: {o}")

@@ -1,8 +1,10 @@
-import boto3
-import os
+#!/usr/bin/env python
+
 import aws_lambda_logging
-import logging
+import boto3
 import json
+import logging
+import os
 from email.parser import Parser
 
 MAIL_BUCKET = os.getenv("mail_bucket_name", "")
@@ -16,6 +18,17 @@ logger = logging.getLogger()
 
 
 def dispatch_subscribers(do_dispatch, client, recipient, message_id, attachments, subs):
+    """Dispatch a message to SNS subscribers based on an email prefix <-> topics association.
+
+    Args:
+        do_dispatch:  Whether or not to actually send the messages (even if relationship exists).
+        client: Handle to boto3 SNS client.
+        recipient:  Email prefix/recipient (e.g. part of address before the "@").
+        message_id: SES message ID.
+        attachments:  List of attachments for message_id as list of S3 prefixes.
+        subs:  Dict of string (email prefix) mapped to SNS topics for subs (list of string/SNS ARN)
+
+    """
     if not do_dispatch:
         return
 
@@ -59,6 +72,18 @@ def parse_email_content(msg, s3_handle, message_id, attachments=[]):
 
     Based on example from:
         https://www.dev2qa.com/python-parse-emails-and-attachments-from-pop3-server-example/
+
+    Args:
+        msg:  Email message object.
+        s3_handle:  Handle to boto3 S3 client.
+        message_id:  SES message ID.
+        attachments:  Initially, an empty list.  On recursion, this list is populated
+            with S3 prefix to various attachments on the message, and is ultimately
+            returned by the function.
+
+    Returns:
+        List of (string) message attachments as S3 prefixes.
+
     """
     # get message content type.
     content_type = msg.get_content_type().lower()
@@ -111,16 +136,22 @@ def parse_email_content(msg, s3_handle, message_id, attachments=[]):
 def handler(event, context):
     """Main event handler.  Sets up logging, parses relevent info from SES
     event notification, shuffles message object to relevant prefixes, and
-    attempts to process attachment(s) in inbound messages."""
+    attempts to process attachment(s) in inbound messages.
+
+    Args:
+        event: AWS event
+        context:  Lambda context
+
+    """
     # Set up logging
     aws_lambda_logging.setup(level=LOG_LEVEL, boto_level="CRITICAL")
     logger.debug(event)
-    # Set up s3 client
+
+    # Set up clients and some variable defaults
     s3 = boto3.client("s3", region_name=MAIL_BUCKET_REGION)
     sns = boto3.client("sns", region_name=os.environ["AWS_DEFAULT_REGION"])
     do_dispatch_subscribers = False
     attachment_prefixes = []
-
     # Set up routing of events to SNS subs
     if SUBS:
         do_dispatch_subscribers = True
