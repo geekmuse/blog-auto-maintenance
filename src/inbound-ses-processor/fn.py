@@ -52,7 +52,7 @@ def dispatch_subscribers(do_dispatch, client, recipient, message_id, attachments
         client.publish(
             TopicArn=s,
             Message=json.dumps(msg),
-            Subject=f"NEW_MSG_{recipient}",
+            Subject=f"NEW MSG: {recipient}",
             MessageStructure="json",
             MessageAttributes={
                 "recipient": {"DataType": "String", "StringValue": recipient},
